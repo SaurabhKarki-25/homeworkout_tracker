@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workout Community & Streak Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #020617; }
+        .card-bg { background-color: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .flame-icon { filter: drop-shadow(0 0 10px #f59e0b) drop-shadow(0 0 20px #ef4444); }
+        .btn-glow:hover:not(:disabled) { box-shadow: 0 0 15px 5px rgba(16, 185, 129, 0.4); }
+        .timer-circle { stroke-dasharray: 283; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset 1s linear, stroke 0.5s; }
+        .tab-active { border-bottom-color: #10b981; color: #10b981; }
+        .tab-inactive { border-bottom-color: transparent; color: #94a3b8; }
+        .slide-in { animation: slide-in 0.5s forwards; }
+        @keyframes slide-in { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        #nudge-toast { position: fixed; bottom: -100px; left: 50%; transform: translateX(-50%); transition: bottom 0.5s ease-in-out; z-index: 100; }
+        .modal-overlay { position: fixed; inset: 0; background-color: rgba(0,0,0,0.7); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 50; }
+        .chat-bubble-sent { background-color: #059669; }
+        .chat-bubble-received { background-color: #374151; }
+    </style>
+</head>
+<body class="bg-slate-900 text-white h-full overflow-y-auto">
+
+    <audio id="workout-music" loop></audio>
+    <div id="nudge-toast" class="card-bg p-4 rounded-lg shadow-2xl w-full max-w-sm"></div>
+
+    <div id="app-container" class="flex flex-col items-center justify-center min-h-full p-4 transition-opacity duration-500">
+        
+        <!-- Auth Views -->
+        <div id="auth-view" class="w-full max-w-sm hidden">
+            <div class="card-bg p-8 rounded-2xl shadow-2xl">
+                <h1 id="auth-title" class="text-3xl font-bold text-center mb-2 text-emerald-400">Log In</h1>
+                <p id="auth-subtitle" class="text-slate-400 text-center mb-8">to your local workout community.</p>
+                <div id="auth-error" class="text-red-400 text-center mb-4 text-sm h-5"></div>
+                <form id="login-form">
+                    <div class="mb-4"><label for="login-email" class="block text-slate-300 text-sm font-medium mb-2">Email</label><input type="email" id="login-email" required class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"></div>
+                    <div class="mb-6"><label for="login-password" class="block text-slate-300 text-sm font-medium mb-2">Password</label><input type="password" id="login-password" required class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"></div>
+                    <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-lg btn-glow">Login</button>
+                    <p class="text-center text-sm text-slate-400 mt-4">Don't have an account? <a href="#" id="show-signup" class="font-medium text-emerald-400 hover:underline">Sign Up</a></p>
+                </form>
+                <form id="signup-form" class="hidden">
+                    <div class="mb-4"><label for="signup-username" class="block text-slate-300 text-sm font-medium mb-2">Username</label><input type="text" id="signup-username" required class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"></div>
+                    <div class="mb-4"><label for="signup-email" class="block text-slate-300 text-sm font-medium mb-2">Email</label><input type="email" id="signup-email" required class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"></div>
+                    <div class="mb-6"><label for="signup-password" class="block text-slate-300 text-sm font-medium mb-2">Password (min. 6 characters)</label><input type="password" id="signup-password" required class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"></div>
+                    <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-lg btn-glow">Sign Up</button>
+                    <p class="text-center text-sm text-slate-400 mt-4">Already have an account? <a href="#" id="show-login" class="font-medium text-emerald-400 hover:underline">Log In</a></p>
+                </form>
+            </div>
+            <div class="p-4 mt-4 bg-amber-900/50 border border-amber-700 rounded-lg text-center">
+                <p class="text-xs text-amber-300"><b>Security Note:</b> For this app to work as a simple file, passwords are saved locally in your browser. Only use this with people you trust.</p>
+            </div>
+        </div>
+
+        <!-- Main Dashboard View -->
+        <div id="main-view" class="hidden w-full max-w-6xl">
+           <header class="flex justify-between items-center mb-6">
+                 <div><h1 class="text-3xl font-bold text-emerald-400">Dashboard</h1><p class="text-slate-400">Welcome, <span id="user-name" class="font-semibold"></span>!</p></div>
+                 <div class="flex items-center space-x-4">
+                     <!-- Messages Icon & Dropdown -->
+                     <div class="relative">
+                        <button id="messages-btn" class="relative">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                            <span id="messages-count" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center"></span>
+                        </button>
+                        <div id="messages-dropdown" class="hidden absolute right-0 mt-2 w-80 card-bg rounded-lg shadow-xl z-20 p-4">
+                            <h4 class="font-bold mb-2">Messages</h4>
+                            <div id="conversations-list" class="max-h-80 overflow-y-auto"></div>
+                        </div>
+                     </div>
+                     <!-- Friend Requests Icon & Dropdown -->
+                     <div class="relative"><button id="requests-btn" class="relative"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg><span id="requests-count" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center"></span></button><div id="requests-dropdown" class="hidden absolute right-0 mt-2 w-72 card-bg rounded-lg shadow-xl z-20 p-4"><h4 class="font-bold mb-2">Friend Requests</h4><div id="requests-list" class="max-h-60 overflow-y-auto"></div></div></div>
+                    <button id="logout-btn" class="bg-slate-700 hover:bg-red-600 text-white text-sm font-medium py-2 px-4 rounded-lg transition">Logout</button>
+                </div>
+            </header>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Left Column -->
+                <div class="md:col-span-1 space-y-6">
+                    <div class="card-bg p-6 rounded-2xl shadow-2xl">
+                        <div id="streak-alert" class="hidden mb-4 p-3 bg-amber-500/20 text-amber-300 text-sm rounded-lg"></div>
+                        <div class="flex justify-between items-center mb-4">
+                             <div><h3 class="text-xl font-bold text-emerald-400">Today's Home Workout</h3><p id="workout-day-title" class="text-slate-300 font-semibold"></p></div>
+                             <button id="ai-workout-btn" title="Generate AI Workout" class="p-2 rounded-full bg-slate-700 hover:bg-emerald-600 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.3 2.05c.58-.58 1.52-.58 2.1 0l4.5 4.5c.58.58.58 1.52 0 2.1l-2.05 2.05c-.18.18-.47.24-.73.15l-1.6-3.53c-.1-.22-.3-.36-.53-.41l-3.53-1.6c-.09-.26-.03-.55.15-.73l2.05-2.05zm-3.25 4.2c.43-.43 1.13-.43 1.56 0l2.6 2.6c.43.43.43 1.13 0 1.56l-3.55 3.55c-.43.43-1.13.43-1.56 0l-2.6-2.6c-.43-.43-.43-1.13 0-1.56l3.55-3.55zM2.05 11.3l2.05 2.05c.18.18.24.47.15.73l-1.6 3.53c-.1.22-.3-.36-.53-.41l-3.53 1.6c-.26.09-.55.03-.73-.15l-2.05-2.05c-.58-.58-.58-1.52 0-2.1l4.5-4.5c.58-.58 1.52-.58 2.1 0z" clip-rule="evenodd" /></svg></button>
+                        </div>
+                        <div id="exercise-preview-list" class="flex-grow space-y-2 overflow-y-auto pr-2 max-h-48"></div>
+                        <button id="start-workout-btn" class="w-full mt-4 bg-emerald-600 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105 btn-glow"></button>
+                    </div>
+                     <div class="card-bg p-6 rounded-2xl shadow-2xl flex flex-col items-center justify-center text-center">
+                        <div class="relative mb-4"><svg class="w-24 h-24 text-amber-500 flame-icon" fill="currentColor" viewBox="0 0 20 20"><path d="M12.395 2.553a1 1 0 00-1.45.385c-.345.675-.892 1.274-1.48 1.875C8.803 5.48 8 6.614 8 8c0 1.593.945 2.85 2.22 3.491.314.164.622.348.91.554.289.206.549.435.78.694.23.259.426.548.568.857.142.31.226.65.226.995 0 .644-.24 1.243-.664 1.727-.424.484-1.01.77-1.636.77-.549 0-1.087-.21-1.508-.567-.42-.357-.758-.803-1.002-1.304a1 1 0 00-1.849-.206c-.288.51-.625.96-1.023 1.348-.398.388-.865.695-1.373.913-.508.218-1.05.328-1.597.328-1.235 0-2.275-.76-2.793-1.895a1 1 0 00-1.805-.301C2.65 14.69 1.61 15.45 0 15.45V0h20v15.45c-1.61 0-2.65-.76-3.145-1.895a1 1 0 00-1.805.301c-.244.501-.582.947-1.002 1.304-.42.357-.96.567-1.508.567-.626 0-1.212-.286-1.636-.77-.424-.484-.664-1.083-.664-1.727 0-.345.084-.685.226-.995.142-.309.338-.598.568-.857.23-.259.49-.488.78-.694.288-.206.596-.39.91-.554C15.055 9.85 16 8.593 16 7c0-1.386-.803-2.52-1.927-3.268-.588-.601-1.135-1.2-1.48-1.875a1 1 0 00-1.45-.385z"/></svg><div id="streak-count" class="absolute inset-0 flex items-center justify-center text-3xl font-black text-white" style="text-shadow: 0 0 5px rgba(0,0,0,0.7);">0</div></div>
+                        <h2 class="text-xl font-bold mb-1">Day Streak</h2><p class="text-slate-400 text-sm">Longest: <span id="longest-streak">0</span> days</p>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="md:col-span-2 card-bg p-6 rounded-2xl shadow-2xl min-h-[400px]">
+                    <div class="border-b border-slate-700 mb-4"><nav class="flex -mb-px space-x-6"><button data-tab="friends-tab" class="tab-btn tab-active py-3 px-1 border-b-2 font-medium text-sm transition-colors">Friends</button><button data-tab="users-tab" class="tab-btn tab-inactive py-3 px-1 border-b-2 font-medium text-sm transition-colors">Find Users</button></nav></div>
+                    <div id="friends-tab" class="tab-content"></div>
+                    <div id="users-tab" class="tab-content hidden"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Workout View -->
+        <div id="workout-view" class="hidden w-full max-w-4xl card-bg p-8 rounded-2xl shadow-2xl">
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h2 id="workout-info-title" class="text-3xl font-bold text-emerald-400">Workout In Progress</h2>
+                    <p id="workout-info-exercise" class="text-slate-300 mt-1">Get ready...</p>
+                    <p id="workout-song-info" class="text-xs text-slate-500 mt-1"></p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="mute-btn" class="p-2 rounded-full bg-slate-700 hover:bg-slate-600">
+                        <svg id="speaker-on-icon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                        <svg id="speaker-off-icon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2L17 8m2 2l2 2" /></svg>
+                    </button>
+                    <button id="end-workout-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">End Workout</button>
+                </div>
+            </div>
+            <div class="flex flex-col md:flex-row items-center justify-around gap-8">
+                <div class="relative w-64 h-64">
+                    <svg class="w-full h-full" viewBox="0 0 100 100">
+                        <circle class="text-slate-700" stroke-width="8" stroke="currentColor" fill="transparent" r="45" cx="50" cy="50" />
+                        <circle id="timer-circle" class="text-emerald-500 timer-circle" stroke-width="8" stroke="currentColor" fill="transparent" r="45" cx="50" cy="50" style="stroke-dashoffset: 283;" />
+                    </svg>
+                    <div id="timer-text" class="absolute inset-0 flex items-center justify-center text-5xl font-bold"></div>
+                </div>
+                <div class="text-center md:text-left">
+                    <button id="set-complete-btn" class="w-64 bg-emerald-600 text-white font-bold py-4 px-8 rounded-lg text-xl transition-transform transform hover:scale-105 btn-glow">Set Complete</button>
+                    <button id="skip-rest-btn" class="hidden w-64 mt-4 bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 px-6 rounded-lg">Skip Rest</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modals -->
+        <div id="ai-workout-modal" class="modal-overlay hidden">
+            <div class="card-bg rounded-2xl shadow-2xl w-full max-w-lg p-8 m-4">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-emerald-400">✨ AI Workout Generator</h2>
+                    <button id="close-ai-modal" class="text-slate-400 hover:text-white text-3xl leading-none">&times;</button>
+                </div>
+                <div id="ai-workout-form-content">
+                    <p class="text-slate-300 mb-6">Let Gemini create a personalized home workout for you. Just set your preferences below.</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                        <div><label for="fitness-level" class="block text-sm font-medium text-slate-300 mb-1">Fitness Level</label><select id="fitness-level" class="w-full bg-slate-700 border-slate-600 rounded-lg p-2"><option>Beginner</option><option selected>Intermediate</option><option>Advanced</option></select></div>
+                        <div><label for="focus-area" class="block text-sm font-medium text-slate-300 mb-1">Focus Area</label><select id="focus-area" class="w-full bg-slate-700 border-slate-600 rounded-lg p-2"><option>Full Body</option><option>Upper Body</option><option>Lower Body</option><option>Core</option></select></div>
+                    </div>
+                    <div class="mb-4"><label for="special-requests" class="block text-sm font-medium text-slate-300 mb-1">Special Requests (optional)</label><input type="text" id="special-requests" placeholder="e.g., focus on cardio, no jumping" class="w-full bg-slate-700 border-slate-600 rounded-lg p-2"></div>
+                    <button id="generate-workout-btn" class="w-full bg-emerald-600 text-white font-bold py-3 px-6 rounded-lg btn-glow">Generate Workout</button>
+                </div>
+                <div id="ai-workout-loading" class="hidden text-center py-8"><p class="text-lg">Generating your workout...</p><div class="mt-4"><svg class="animate-spin h-8 w-8 text-emerald-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div></div>
+                <div id="ai-workout-error" class="hidden text-center py-8"><p class="text-red-400">Sorry, something went wrong. Please try again.</p><button id="retry-ai-workout-btn" class="mt-4 bg-slate-600 text-white py-2 px-4 rounded-lg">Retry</button></div>
+            </div>
+        </div>
+        
+        <div id="chat-modal" class="modal-overlay hidden">
+            <div class="card-bg rounded-2xl shadow-2xl w-full max-w-lg h-[80vh] m-4 flex flex-col">
+                <div class="flex justify-between items-center p-4 border-b border-slate-700">
+                    <h2 class="text-xl font-bold text-sky-400">Chat with <span id="chat-friend-name"></span></h2>
+                    <button id="close-chat-modal" class="text-slate-400 hover:text-white text-3xl leading-none">&times;</button>
+                </div>
+                <div id="chat-messages-container" class="flex-grow p-4 overflow-y-auto flex flex-col space-y-4">
+                    <!-- Messages will be injected here -->
+                </div>
+                <form id="chat-form" class="p-4 border-t border-slate-700 flex space-x-2">
+                    <input type="text" id="chat-input" placeholder="Type a message..." class="w-full bg-slate-700 border-slate-600 rounded-lg p-2 text-white" autocomplete="off">
+                    <button type="submit" class="bg-sky-600 hover:bg-sky-500 text-white font-bold p-2 rounded-lg">Send</button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+    
+<script type="module">
+    // --- Gemini API Key Setup ---
+    const apiKey = ""; // This is provided by the execution environment.
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+    // --- Core Application Logic (No Firebase, No Hashing) ---
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- Element Selectors ---
+        const authView = document.getElementById('auth-view');
+        const mainView = document.getElementById('main-view');
+        const workoutView = document.getElementById('workout-view');
+        const showSignupBtn = document.getElementById('show-signup');
+        const showLoginBtn = document.getElementById('show-login');
+        const loginForm = document.getElementById('login-form');
+        const signupForm = document.getElementById('signup-form');
+        const authTitle = document.getElementById('auth-title');
+        const authSubtitle = document.getElementById('auth-subtitle');
+        const authError = document.getElementById('auth-error');
+        const logoutBtn = document.getElementById('logout-btn');
+        const userNameEl = document.getElementById('user-name');
+        const streakCountEl = document.getElementById('streak-count');
+        const longestStreakEl = document.getElementById('longest-streak');
+        const workoutDayTitleEl = document.getElementById('workout-day-title');
+        const exercisePreviewListEl = document.getElementById('exercise-preview-list');
+        const startWorkoutBtn = document.getElementById('start-workout-btn');
+        const streakAlertEl = document.getElementById('streak-alert');
+        const requestsBtn = document.getElementById('requests-btn');
+        const requestsCountEl = document.getElementById('requests-count');
+        const requestsDropdown = document.getElementById('requests-dropdown');
+        const requestsListEl = document.getElementById('requests-list');
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const friendsTab = document.getElementById('friends-tab');
+        const usersTab = document.getElementById('users-tab');
+        const messagesBtn = document.getElementById('messages-btn');
+        const messagesCountEl = document.getElementById('messages-count');
+        const messagesDropdown = document.getElementById('messages-dropdown');
+        const conversationsListEl = document.getElementById('conversations-list');
+        
+        // Workout View Elements
+        const workoutInfoTitle = document.getElementById('workout-info-title');
+        const workoutInfoExercise = document.getElementById('workout-info-exercise');
+        const workoutSongInfo = document.getElementById('workout-song-info');
+        const timerCircle = document.getElementById('timer-circle');
+        const timerText = document.getElementById('timer-text');
+        const setCompleteBtn = document.getElementById('set-complete-btn');
+        const skipRestBtn = document.getElementById('skip-rest-btn');
+        const endWorkoutBtn = document.getElementById('end-workout-btn');
+        const muteBtn = document.getElementById('mute-btn');
+        const speakerOnIcon = document.getElementById('speaker-on-icon');
+        const speakerOffIcon = document.getElementById('speaker-off-icon');
+        const workoutMusic = document.getElementById('workout-music');
+
+        // AI Modal Elements
+        const aiWorkoutBtn = document.getElementById('ai-workout-btn');
+        const aiWorkoutModal = document.getElementById('ai-workout-modal');
+        const closeAiModalBtn = document.getElementById('close-ai-modal');
+        const generateWorkoutBtn = document.getElementById('generate-workout-btn');
+        const aiWorkoutFormContent = document.getElementById('ai-workout-form-content');
+        const aiWorkoutLoading = document.getElementById('ai-workout-loading');
+        const aiWorkoutError = document.getElementById('ai-workout-error');
+        const retryAiBtn = document.getElementById('retry-ai-workout-btn');
+
+        // Chat Modal Elements
+        const chatModal = document.getElementById('chat-modal');
+        const closeChatModalBtn = document.getElementById('close-chat-modal');
+        const chatFriendNameEl = document.getElementById('chat-friend-name');
+        const chatMessagesContainerEl = document.getElementById('chat-messages-container');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        
+
+        // --- Local Database ---
+        const DB_KEY = 'workoutCommunityDB';
+        let db = { users: {}, messages: [] };
+        let currentUserEmail = null;
+        let activeChatFriendEmail = null;
+        let pollingInterval = null;
+
+        // --- App State ---
+        let currentWorkoutState = {};
+        let timerInterval = null;
+        let isMuted = false;
+        const playlist = [ 
+            { title: "Leva - Eternity", url: "https://assets.mixkit.co/music/preview/mixkit-leva-eternity-149.mp3" }, 
+            { title: "Ahjay Stelino - Way Of The Samurai", url: "https://assets.mixkit.co/music/preview/mixkit-way-of-the-samurai-122.mp3" }, 
+            { title: "Eugenio Mininni - Enthusiasm", url: "https://assets.mixkit.co/music/preview/mixkit-enthusiasm-11.mp3" } 
+        ];
+
+        function loadDatabase() {
+            const data = localStorage.getItem(DB_KEY);
+            if (data) {
+                db = JSON.parse(data);
+                if (!db.messages) db.messages = [];
+            }
+        }
+
+        function saveDatabase() {
+            localStorage.setItem(DB_KEY, JSON.stringify(db));
+        }
+
+        // --- Authentication (Simplified) ---
+        function handleSignup(e) {
+            e.preventDefault();
+            loadDatabase(); // Failsafe to ensure DB is loaded
+            authError.textContent = '';
+            const username = document.getElementById('signup-username').value.trim();
+            const email = document.getElementById('signup-email').value.trim().toLowerCase();
+            const password = document.getElementById('signup-password').value;
+
+            if (!username || !email || !password) {
+                authError.textContent = 'All fields are required.'; return;
+            }
+            if (password.length < 6) {
+                authError.textContent = 'Password must be at least 6 characters.'; return;
+            }
+            if (db.users[email]) {
+                authError.textContent = 'An account with this email already exists.'; return;
+            }
+
+            db.users[email] = {
+                email, username, password,
+                streak: 0, longestStreak: 0, lastWorkoutDate: null,
+                friends: [], friendRequests: { sent: [], received: [] },
+                currentWorkout: null,
+            };
+            saveDatabase();
+            loginUser(email);
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            loadDatabase(); // Failsafe to ensure DB is loaded before checking
+            authError.textContent = '';
+            const email = document.getElementById('login-email').value.trim().toLowerCase();
+            const password = document.getElementById('login-password').value;
+            const user = db.users[email];
+
+            if (user && user.password === password) {
+                loginUser(email);
+            } else {
+                authError.textContent = 'Invalid email or password.';
+            }
+        }
+
+        function loginUser(email) {
+            localStorage.setItem('loggedInUser', email);
+            currentUserEmail = email;
+            renderDashboard();
+            showView('main-view');
+            if(pollingInterval) clearInterval(pollingInterval);
+            pollingInterval = setInterval(renderUnreadCounts, 3000);
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('loggedInUser');
+            currentUserEmail = null;
+            if(pollingInterval) clearInterval(pollingInterval);
+            showView('auth-view');
+        }
+
+        // --- View Management ---
+        function showView(viewId) {
+            ['auth-view', 'main-view', 'workout-view'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            });
+            const viewToShow = document.getElementById(viewId);
+            if (viewToShow) viewToShow.classList.remove('hidden');
+        }
+        
+        // --- Rendering ---
+        function renderDashboard() {
+            if (!currentUserEmail || !db.users[currentUserEmail]) {
+                handleLogout();
+                return;
+            }
+            const user = db.users[currentUserEmail];
+            userNameEl.textContent = user.username;
+            streakCountEl.textContent = user.streak;
+            longestStreakEl.textContent = user.longestStreak;
+            
+            checkStreak();
+            renderWorkoutPreview();
+            renderFriendRequests();
+            renderFriendsList();
+            renderAllUsers();
+            renderUnreadCounts();
+            renderConversationsList();
+        }
+
+        function renderWorkoutPreview() {
+            const user = db.users[currentUserEmail];
+            let workout = user.currentWorkout || getTodaysWorkout();
+            if (!workout || !workout.exercises) {
+                 workout = { title: "Rest Day", exercises: [] };
+            }
+            
+            user.currentWorkout = workout;
+            saveDatabase();
+
+            workoutDayTitleEl.textContent = workout.title;
+            
+            if (workout.exercises.length === 0) {
+                exercisePreviewListEl.innerHTML = `<p class="text-slate-400">Enjoy your rest!</p>`;
+                startWorkoutBtn.textContent = 'Today is a Rest Day';
+                startWorkoutBtn.disabled = true;
+                startWorkoutBtn.classList.remove('bg-emerald-600', 'btn-glow');
+                startWorkoutBtn.classList.add('bg-slate-600', 'cursor-not-allowed');
+                streakAlertEl.classList.add('hidden');
+                return;
+            }
+
+            exercisePreviewListEl.innerHTML = workout.exercises.map(ex => `
+                <div class="text-sm text-slate-400">${ex.name} - ${ex.sets} sets of ${ex.reps} reps</div>
+            `).join('');
+
+            const today = new Date().toISOString().split('T')[0];
+            if (user.lastWorkoutDate === today) {
+                startWorkoutBtn.textContent = 'Workout Completed Today!';
+                startWorkoutBtn.disabled = true;
+                startWorkoutBtn.classList.remove('bg-emerald-600', 'btn-glow');
+                startWorkoutBtn.classList.add('bg-slate-600', 'cursor-not-allowed');
+                streakAlertEl.classList.add('hidden');
+            } else {
+                startWorkoutBtn.textContent = 'Start Guided Workout';
+                startWorkoutBtn.disabled = false;
+                startWorkoutBtn.classList.add('bg-emerald-600', 'btn-glow');
+                startWorkoutBtn.classList.remove('bg-slate-600', 'cursor-not-allowed');
+                if(user.streak > 0) {
+                   streakAlertEl.textContent = `You haven't worked out yet today. Keep your ${user.streak}-day streak alive!`;
+                   streakAlertEl.classList.remove('hidden');
+                } else {
+                   streakAlertEl.classList.add('hidden');
+                }
+            }
+        }
+
+        function renderFriendRequests() {
+            const user = db.users[currentUserEmail];
+            const requests = user.friendRequests.received;
+            
+            requestsCountEl.textContent = requests.length;
+            requestsCountEl.classList.toggle('hidden', requests.length === 0);
+            
+            if (requests.length === 0) {
+                requestsListEl.innerHTML = `<p class="text-sm text-slate-400">No new requests.</p>`;
+                return;
+            }
+
+            requestsListEl.innerHTML = requests.map(requestEmail => {
+                const sender = db.users[requestEmail];
+                if (!sender) return '';
+                return `
+                <div class="flex items-center justify-between p-2 rounded-lg hover:bg-slate-700">
+                    <span class="text-sm font-medium">${sender.username}</span>
+                    <div class="flex space-x-2">
+                        <button data-action="accept" data-email="${requestEmail}" class="p-1 bg-emerald-600 rounded-full hover:bg-emerald-500" title="Accept"><svg class="h-4 w-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></button>
+                        <button data-action="decline" data-email="${requestEmail}" class="p-1 bg-red-600 rounded-full hover:bg-red-500" title="Decline"><svg class="h-4 w-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+        
+        function renderFriendsList() {
+             const user = db.users[currentUserEmail];
+             if (user.friends.length === 0) {
+                friendsTab.innerHTML = `<p class="text-center text-slate-400 mt-8">You haven't added any friends yet. Find them in the "Find Users" tab!</p>`;
+                return;
+             }
+             
+             const today = new Date().toISOString().split('T')[0];
+             const yesterday = new Date();
+             yesterday.setDate(yesterday.getDate() - 1);
+             const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+             friendsTab.innerHTML = user.friends.map(friendEmail => {
+                const friend = db.users[friendEmail];
+                if (!friend) return '';
+
+                let statusIndicator, streakEmoji, numberColor;
+                if (friend.lastWorkoutDate === today) {
+                    streakEmoji = '🔥'; numberColor = 'text-amber-400';
+                    statusIndicator = `<p class="text-xs mt-1 text-emerald-400 font-medium">Completed Today</p>`;
+                } else if (friend.lastWorkoutDate === yesterdayStr && friend.streak > 0) {
+                    streakEmoji = '⏳'; numberColor = 'text-amber-400';
+                    statusIndicator = `<p class="text-xs mt-1 text-amber-400 font-medium">Streak at Risk</p>`;
+                } else if (friend.streak > 0) {
+                    streakEmoji = '❄️'; numberColor = 'text-slate-500';
+                    statusIndicator = `<p class="text-xs mt-1 text-slate-500">Streak is Cold</p>`;
+                } else {
+                     streakEmoji = '💤'; numberColor = 'text-slate-500';
+                     statusIndicator = `<p class="text-xs mt-1 text-slate-500">No active streak</p>`;
+                }
+
+                return `
+                    <div class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-700/50 transition-colors">
+                        <div class="flex items-center space-x-4">
+                            <div class="text-center"><p class="text-3xl">${streakEmoji}</p></div>
+                            <div><p class="font-semibold">${friend.username}</p>${statusIndicator}</div>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                             <div class="text-right">
+                                <p class="text-2xl font-bold ${numberColor}">${friend.streak}</p>
+                                <p class="text-xs text-slate-400">day streak</p>
+                             </div>
+                             <div class="flex flex-col space-y-2">
+                                <button data-action="message" data-email="${friendEmail}" class="text-xs bg-sky-600 hover:bg-sky-500 px-2 py-1 rounded-md" title="Message ${friend.username}">Message</button>
+                                <button data-action="remove" data-email="${friendEmail}" class="text-xs bg-red-800 hover:bg-red-700 px-2 py-1 rounded-md" title="Remove ${friend.username}">Remove</button>
+                             </div>
+                        </div>
+                    </div>`;
+             }).join('');
+        }
+
+        function renderAllUsers() {
+             const allUserEmails = Object.keys(db.users);
+             const user = db.users[currentUserEmail];
+             
+             usersTab.innerHTML = allUserEmails.filter(email => email !== currentUserEmail).map(email => {
+                const otherUser = db.users[email];
+                const isFriend = user.friends.includes(email);
+                const requestSent = user.friendRequests.sent.includes(email);
+                const requestReceived = user.friendRequests.received.includes(email);
+                
+                let buttonHtml = '';
+                if (isFriend) buttonHtml = `<span class="text-sm text-emerald-400">Already friends</span>`;
+                else if (requestSent) buttonHtml = `<span class="text-sm text-slate-400">Request sent</span>`;
+                else if (requestReceived) buttonHtml = `<button data-action="accept" data-email="${email}" class="text-sm bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded-md">Accept Request</button>`;
+                else buttonHtml = `<button data-action="add" data-email="${email}" class="text-sm bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-md">Add Friend</button>`;
+
+                return `<div class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-700/50"><p class="font-semibold">${otherUser.username}</p>${buttonHtml}</div>`;
+             }).join('');
+        }
+
+        function renderUnreadCounts() {
+            if (!currentUserEmail) return;
+            const user = db.users[currentUserEmail];
+            const reqCount = user.friendRequests.received.length;
+            requestsCountEl.textContent = reqCount;
+            requestsCountEl.classList.toggle('hidden', reqCount === 0);
+
+            const unreadMessages = db.messages.filter(msg => msg.to === currentUserEmail && !msg.read);
+            messagesCountEl.textContent = unreadMessages.length;
+            messagesCountEl.classList.toggle('hidden', unreadMessages.length === 0);
+            
+            if (!messagesDropdown.classList.contains('hidden')) {
+                renderConversationsList();
+            }
+        }
+        
+        function renderConversationsList() {
+            if (!currentUserEmail) return;
+            const conversations = {};
+            db.messages.forEach(msg => {
+                const friendEmail = msg.from === currentUserEmail ? msg.to : msg.from;
+                if((msg.from === currentUserEmail || msg.to === currentUserEmail) && (!conversations[friendEmail] || conversations[friendEmail].timestamp < msg.timestamp)) {
+                    conversations[friendEmail] = msg;
+                }
+            });
+
+            const sortedConvos = Object.values(conversations).sort((a, b) => b.timestamp - a.timestamp);
+
+            if (sortedConvos.length === 0) {
+                conversationsListEl.innerHTML = `<p class="text-sm text-slate-400">No conversations yet.</p>`;
+                return;
+            }
+
+            conversationsListEl.innerHTML = sortedConvos.map(msg => {
+                const friendEmail = msg.from === currentUserEmail ? msg.to : msg.from;
+                const friend = db.users[friendEmail];
+                if (!friend) return '';
+
+                const isUnread = msg.to === currentUserEmail && !msg.read;
+                const snippet = msg.content.length > 25 ? msg.content.substring(0, 25) + '...' : msg.content;
+
+                return `
+                    <div data-action="open-chat" data-email="${friendEmail}" class="p-2 rounded-lg hover:bg-slate-700 cursor-pointer">
+                        <div class="flex justify-between items-center">
+                            <p class="font-semibold ${isUnread ? 'text-white' : 'text-slate-300'}">${friend.username}</p>
+                            ${isUnread ? '<span class="w-2 h-2 bg-sky-400 rounded-full"></span>' : ''}
+                        </div>
+                        <p class="text-sm ${isUnread ? 'text-slate-300' : 'text-slate-500'}">${msg.from === currentUserEmail ? 'You: ' : ''}${snippet}</p>
+                    </div>`;
+            }).join('');
+        }
+
+        function renderChatModal(friendEmail) {
+            activeChatFriendEmail = friendEmail;
+            const friend = db.users[friendEmail];
+            chatFriendNameEl.textContent = friend.username;
+
+            const chatHistory = db.messages.filter(msg => (msg.from === currentUserEmail && msg.to === friendEmail) || (msg.from === friendEmail && msg.to === currentUserEmail)).sort((a,b) => a.timestamp - b.timestamp);
+
+            chatMessagesContainerEl.innerHTML = chatHistory.map(msg => {
+                const isSent = msg.from === currentUserEmail;
+                return `<div class="flex ${isSent ? 'justify-end' : 'justify-start'}"><div class="max-w-xs lg:max-w-md p-3 rounded-lg ${isSent ? 'chat-bubble-sent' : 'chat-bubble-received'}"><p>${msg.content}</p></div></div>`;
+            }).join('');
+            
+            db.messages.forEach(msg => { if(msg.to === currentUserEmail && msg.from === friendEmail) msg.read = true; });
+            saveDatabase();
+            renderUnreadCounts();
+
+            chatMessagesContainerEl.scrollTop = chatMessagesContainerEl.scrollHeight;
+            chatModal.classList.remove('hidden');
+        }
+
+        function handleSendMessage(e) {
+            e.preventDefault();
+            const content = chatInput.value.trim();
+            if (content && activeChatFriendEmail) {
+                db.messages.push({ from: currentUserEmail, to: activeChatFriendEmail, content: content, timestamp: Date.now(), read: false });
+                saveDatabase();
+                renderChatModal(activeChatFriendEmail);
+                chatInput.value = '';
+            }
+        }
+        
+        // --- Social Actions ---
+        function sendFriendRequest(targetEmail) {
+            db.users[currentUserEmail].friendRequests.sent.push(targetEmail);
+            db.users[targetEmail].friendRequests.received.push(currentUserEmail);
+            saveDatabase();
+            renderAllUsers();
+        }
+
+        function acceptFriendRequest(senderEmail) {
+            const currentUser = db.users[currentUserEmail];
+            const senderUser = db.users[senderEmail];
+            if (!senderUser) return; 
+
+            if (!currentUser.friends.includes(senderEmail)) currentUser.friends.push(senderEmail);
+            if (!senderUser.friends.includes(currentUserEmail)) senderUser.friends.push(currentUserEmail);
+
+            currentUser.friendRequests.received = currentUser.friendRequests.received.filter(e => e !== senderEmail);
+            senderUser.friendRequests.sent = senderUser.friendRequests.sent.filter(e => e !== currentUserEmail);
+            
+            saveDatabase();
+            renderDashboard();
+        }
+
+        function declineFriendRequest(senderEmail) {
+            const currentUser = db.users[currentUserEmail];
+            const senderUser = db.users[senderEmail];
+            if (!senderUser) return;
+
+            currentUser.friendRequests.received = currentUser.friendRequests.received.filter(e => e !== senderEmail);
+            senderUser.friendRequests.sent = senderUser.friendRequests.sent.filter(e => e !== currentUserEmail);
+
+            saveDatabase();
+            renderFriendRequests();
+            renderAllUsers();
+        }
+
+        function removeFriend(friendEmail) {
+            const currentUser = db.users[currentUserEmail];
+            const friendUser = db.users[friendEmail];
+            
+            currentUser.friends = currentUser.friends.filter(e => e !== friendEmail);
+            if(friendUser) friendUser.friends = friendUser.friends.filter(e => e !== currentUserEmail);
+            
+            saveDatabase();
+            renderDashboard();
+        }
+        
+        // --- Workout Logic ---
+        function checkStreak() {
+            const user = db.users[currentUserEmail];
+            if (!user.lastWorkoutDate) return;
+
+            const today = new Date();
+            const lastWorkout = new Date(user.lastWorkoutDate);
+            const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const lastWorkoutDay = new Date(lastWorkout.getFullYear(), lastWorkout.getMonth(), lastWorkout.getDate());
+            const diffTime = todayDay - lastWorkoutDay;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays > 1) {
+                user.streak = 0;
+                saveDatabase();
+            }
+        }
+
+        function startWorkout() {
+            const user = db.users[currentUserEmail];
+            const workout = user.currentWorkout;
+            
+            currentWorkoutState = {
+                workout: JSON.parse(JSON.stringify(workout)), // Deep copy
+                exerciseIndex: 0,
+                setIndex: 0,
+                isResting: false
+            };
+            
+            showView('workout-view');
+            speak(`Starting workout: ${workout.title}. Let's go!`);
+            nextStepInWorkout();
+        }
+
+        async function nextStepInWorkout() {
+            if (timerInterval) clearInterval(timerInterval);
+            setCompleteBtn.classList.remove('hidden');
+            skipRestBtn.classList.add('hidden');
+
+            const { workout, exerciseIndex, setIndex } = currentWorkoutState;
+
+            if (exerciseIndex >= workout.exercises.length) {
+                stopWorkout(true); // Workout complete
+                return;
+            }
+
+            const exercise = workout.exercises[exerciseIndex];
+            
+            workoutInfoTitle.textContent = exercise.name;
+            workoutInfoExercise.textContent = `Set ${setIndex + 1} of ${exercise.sets} (${exercise.reps} reps)`;
+            
+            if (exercise.reps.toLowerCase().includes('s')) { // Duration-based (e.g., plank)
+                const duration = parseInt(exercise.reps);
+                startTimer(duration, `Hold ${exercise.name}`);
+                setCompleteBtn.classList.add('hidden');
+            } else { // Rep-based
+                await startMusic();
+                speak(`Get ready for ${exercise.name}, set ${setIndex + 1}.`);
+                timerText.textContent = "START";
+                updateTimerCircle(1);
+            }
+        }
+
+        function stopWorkout(completed) {
+            if (timerInterval) clearInterval(timerInterval);
+            stopMusic();
+
+            if(completed) {
+                speak("Workout complete! Great job!");
+                const user = db.users[currentUserEmail];
+                const today = new Date().toISOString().split('T')[0];
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayStr = yesterday.toISOString().split('T')[0];
+                
+                if (user.lastWorkoutDate === yesterdayStr) {
+                    user.streak++;
+                } else {
+                    user.streak = 1;
+                }
+                
+                user.lastWorkoutDate = today;
+                if (user.streak > user.longestStreak) {
+                    user.longestStreak = user.streak;
+                }
+                user.currentWorkout = null; // Clear AI workout
+                saveDatabase();
+            } else {
+                speak("Workout stopped.");
+            }
+            
+            showView('main-view');
+            renderDashboard();
+        }
+
+        function startRest() {
+            stopMusic();
+            const restTime = 60; // 60 seconds rest
+            currentWorkoutState.isResting = true;
+            
+            currentWorkoutState.setIndex++;
+            const { workout, exerciseIndex, setIndex } = currentWorkoutState;
+            
+            if (setIndex >= workout.exercises[exerciseIndex].sets) {
+                currentWorkoutState.exerciseIndex++;
+                currentWorkoutState.setIndex = 0;
+            }
+            
+            startTimer(restTime, "Rest");
+            setCompleteBtn.classList.add('hidden');
+            skipRestBtn.classList.remove('hidden');
+        }
+
+        function startTimer(duration, text) {
+            let timeLeft = duration;
+            speak(`${text}. Starting now.`);
+            
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                timerText.textContent = timeLeft;
+                updateTimerCircle(timeLeft / duration);
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    currentWorkoutState.isResting = false;
+                    nextStepInWorkout();
+                }
+            }, 1000);
+        }
+
+        function updateTimerCircle(fraction) {
+            const circleLength = 283;
+            const offset = fraction * circleLength;
+            timerCircle.style.strokeDashoffset = circleLength - offset;
+        }
+
+        function speak(text) {
+            if (isMuted) return;
+            const utterance = new SpeechSynthesisUtterance(text);
+            const originalVolume = workoutMusic.volume;
+            
+            utterance.onstart = () => {
+                workoutMusic.volume = Math.min(0.2, originalVolume);
+            };
+            utterance.onend = () => {
+                workoutMusic.volume = originalVolume;
+            };
+            
+            speechSynthesis.speak(utterance);
+        }
+
+        async function startMusic() {
+            if (isMuted) return;
+            try {
+                if (workoutMusic.src && !workoutMusic.paused) {
+                    await workoutMusic.play();
+                    return;
+                };
+                const track = playlist[Math.floor(Math.random() * playlist.length)];
+                workoutMusic.src = track.url;
+                workoutSongInfo.textContent = `Playing: ${track.title}`;
+                workoutMusic.volume = 0.5;
+                await workoutMusic.play();
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.error("Audio autoplay failed:", error);
+                }
+            }
+        }
+
+        function stopMusic() {
+            if (!workoutMusic.paused) {
+                workoutMusic.pause();
+            }
+            // Don't reset currentTime here, to allow resume.
+            workoutSongInfo.textContent = "";
+        }
+        
+        async function callGeminiWithRetry(payload) {
+             let response, delay = 1000;
+             for (let i = 0; i < 4; i++) {
+                 try {
+                     response = await fetch(geminiApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                     if (response.ok) {
+                         const result = await response.json();
+                         const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                         if (text) return JSON.parse(text.replace(/^```json\s*|```\s*$/g, ''));
+                     }
+                     if (response.status >= 400 && response.status < 500) throw new Error(`Client Error: ${response.status}`);
+                 } catch (error) {
+                     console.error(`Gemini API call attempt ${i + 1} failed. Retrying in ${delay}ms...`, error);
+                     if (i < 3) await new Promise(resolve => setTimeout(resolve, delay));
+                     delay *= 2;
+                 }
+             }
+             throw new Error("Gemini API call failed after multiple retries.");
+        }
+
+        async function handleGenerateWorkout() {
+             aiWorkoutFormContent.classList.add('hidden');
+             aiWorkoutError.classList.add('hidden');
+             aiWorkoutLoading.classList.remove('hidden');
+             
+             const fitnessLevel = document.getElementById('fitness-level').value;
+             const focusArea = document.getElementById('focus-area').value;
+             const specialRequests = document.getElementById('special-requests').value;
+
+             const prompt = `Create a personalized, equipment-free home workout plan. Fitness Level: ${fitnessLevel}, Focus Area: ${focusArea}, Special Requests: ${specialRequests || 'None'}. Provide a title and exercises with name, sets, and reps. Return as a single JSON object with keys "title" (string) and "exercises" (an array of objects with "name", "sets", "reps" keys). Do not use markdown.`;
+             const payload = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } };
+
+             try {
+                const workout = await callGeminiWithRetry(payload);
+                db.users[currentUserEmail].currentWorkout = workout;
+                saveDatabase();
+                renderWorkoutPreview();
+                aiWorkoutModal.classList.add('hidden');
+             } catch (error) {
+                console.error('AI Workout Generation Failed:', error);
+                aiWorkoutError.classList.remove('hidden');
+             } finally {
+                aiWorkoutFormContent.classList.remove('hidden');
+                aiWorkoutLoading.classList.add('hidden');
+             }
+        }
+
+        // --- Initializer ---
+        function init() {
+            loadDatabase();
+            currentUserEmail = localStorage.getItem('loggedInUser');
+            if (currentUserEmail && db.users[currentUserEmail]) {
+                loginUser(currentUserEmail);
+            } else {
+                currentUserEmail = null;
+                showView('auth-view');
+            }
+
+            // Event Listeners
+            loginForm.addEventListener('submit', handleLogin);
+            signupForm.addEventListener('submit', handleSignup);
+            logoutBtn.addEventListener('click', handleLogout);
+            showSignupBtn.addEventListener('click', (e) => { e.preventDefault(); signupForm.classList.remove('hidden'); loginForm.classList.add('hidden'); authTitle.textContent = 'Sign Up'; authSubtitle.textContent = 'to join the community.'; authError.textContent = ''; });
+            showLoginBtn.addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.remove('hidden'); signupForm.classList.add('hidden'); authTitle.textContent = 'Log In'; authSubtitle.textContent = 'to your local workout community.'; authError.textContent = ''; });
+            requestsBtn.addEventListener('click', () => requestsDropdown.classList.toggle('hidden'));
+            messagesBtn.addEventListener('click', () => { messagesDropdown.classList.toggle('hidden'); if (!messagesDropdown.classList.contains('hidden')) renderConversationsList(); });
+            document.addEventListener('click', (e) => { 
+                if (!requestsBtn.contains(e.target) && !requestsDropdown.contains(e.target)) requestsDropdown.classList.add('hidden'); 
+                if (!messagesBtn.contains(e.target) && !messagesDropdown.contains(e.target)) messagesDropdown.classList.add('hidden'); 
+            });
+            requestsListEl.addEventListener('click', (e) => { const btn = e.target.closest('button'); if(!btn) return; const email = btn.dataset.email; if(btn.dataset.action==='accept') acceptFriendRequest(email); if(btn.dataset.action==='decline') declineFriendRequest(email); });
+            usersTab.addEventListener('click', (e) => { const btn = e.target.closest('button'); if(!btn) return; const email = btn.dataset.email; if(btn.dataset.action==='add') sendFriendRequest(email); if(btn.dataset.action==='accept') acceptFriendRequest(email); });
+            friendsTab.addEventListener('click', (e) => { const btn = e.target.closest('button'); if(!btn) return; const email = btn.dataset.email; if(btn.dataset.action === 'remove'){ if (confirm(`Are you sure you want to remove this friend?`)) removeFriend(email);} if(btn.dataset.action === 'message') renderChatModal(email); });
+            tabBtns.forEach(btn => btn.addEventListener('click', () => { tabBtns.forEach(b => b.classList.replace('tab-active', 'tab-inactive')); btn.classList.replace('tab-inactive', 'tab-active'); tabContents.forEach(c => c.classList.add('hidden')); document.getElementById(btn.dataset.tab).classList.remove('hidden'); }));
+            aiWorkoutBtn.addEventListener('click', () => aiWorkoutModal.classList.remove('hidden'));
+            closeAiModalBtn.addEventListener('click', () => aiWorkoutModal.classList.add('hidden'));
+            generateWorkoutBtn.addEventListener('click', handleGenerateWorkout);
+            retryAiBtn.addEventListener('click', handleGenerateWorkout);
+            startWorkoutBtn.addEventListener('click', startWorkout);
+            closeChatModalBtn.addEventListener('click', () => { chatModal.classList.add('hidden'); activeChatFriendEmail = null; });
+            chatForm.addEventListener('submit', handleSendMessage);
+            conversationsListEl.addEventListener('click', (e) => { const convoEl = e.target.closest('[data-action="open-chat"]'); if (convoEl) { messagesDropdown.classList.add('hidden'); renderChatModal(convoEl.dataset.email); }});
+            
+            // Workout view listeners
+            setCompleteBtn.addEventListener('click', startRest);
+            skipRestBtn.addEventListener('click', () => {
+                if (timerInterval) clearInterval(timerInterval);
+                currentWorkoutState.isResting = false;
+                nextStepInWorkout();
+            });
+            endWorkoutBtn.addEventListener('click', () => stopWorkout(false));
+            muteBtn.addEventListener('click', () => {
+                isMuted = !isMuted;
+                speakerOnIcon.classList.toggle('hidden', isMuted);
+                speakerOffIcon.classList.toggle('hidden', !isMuted);
+                if(isMuted) stopMusic();
+            });
+        }
+
+        function getTodaysWorkout() {
+             const day = new Date().getDay();
+             const workouts = [
+                { title: "Sunday: Rest Day", exercises: [] },
+                { title: "Monday: Push Day", exercises: [ { name: "Push-ups", sets: 3, reps: "To Failure" }, { name: "Pike Push-ups", sets: 3, reps: "8-12" }, { name: "Tricep Dips", sets: 3, reps: "10-15" } ] },
+                { title: "Tuesday: Pull Day", exercises: [ { name: "Towel Rows", sets: 3, reps: "10-15" }, { name: "Supermans", sets: 3, reps: "15-20" }, { name: "Doorway Curls", sets: 3, reps: "10-12/arm" } ] },
+                { title: "Wednesday: Rest Day", exercises: [] },
+                { title: "Thursday: Leg Day", exercises: [ { name: "Squats", sets: 4, reps: "15-20" }, { name: "Lunges", sets: 3, reps: "10-12/leg" }, { name: "Glute Bridges", sets: 3, reps: "15-20" } ] },
+                { title: "Friday: Full Body & Core", exercises: [ { name: "Burpees", sets: 3, reps: "10-12" }, { name: "Plank", sets: 3, reps: "30-60s" }, { name: "Leg Raises", sets: 3, reps: "15-20" } ] },
+                { title: "Saturday: Active Recovery", exercises: [ { name: "Light Cardio", sets: 1, reps: "20-30m" }, { name: "Stretching", sets: 1, reps: "10-15m" } ] }
+             ];
+             return workouts[day];
+        }
+
+        init();
+    });
+</script>
+</body>
+</html>
